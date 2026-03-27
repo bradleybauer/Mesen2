@@ -228,7 +228,7 @@ namespace Mesen.Utilities
 				RecordApi.ResearchStop();
 			} else {
 				string basePath = GetOutputFilename(ConfigManager.AviFolder, "");
-				RecordApi.ResearchRecord(basePath, new ResearchRecordingOptions() { SaveStateIntervalFrames = 1800 });
+				RecordApi.ResearchRecord(basePath, new ResearchRecordingOptions() { SaveStateIntervalFrames = 60 });
 			}
 		}
 

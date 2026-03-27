@@ -10,7 +10,7 @@ class Emulator;
 
 struct ResearchRecordingOptions
 {
-	uint32_t SaveStateIntervalFrames = 1800; // ~30 seconds at 60fps, 0 = disabled
+	uint32_t SaveStateIntervalFrames = 60; // 1 Hz at 60fps, 0 = disabled
 };
 
 class DataCollector
