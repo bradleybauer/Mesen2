@@ -158,6 +158,10 @@ int LuaApi::GetLibrary(lua_State *lua)
 		{ "getScriptDataFolder", LuaApi::GetScriptDataFolder },
 		{ "getRomInfo", LuaApi::GetRomInfo },
 		{ "getLogWindowLog", LuaApi::GetLogWindowLog },
+
+		{ "startResearchRecording", LuaApi::StartResearchRecording },
+		{ "stopResearchRecording", LuaApi::StopResearchRecording },
+		{ "isResearchRecording", LuaApi::IsResearchRecording },
 		{ NULL,NULL }
 	};
 
@@ -1146,4 +1150,35 @@ int LuaApi::SetState(lua_State* lua)
 
 	s.Stream(*_emu->GetConsole().get(), "", -1);
 	return 0;
+}
+
+int LuaApi::StartResearchRecording(lua_State* lua)
+{
+	LuaCallHelper l(lua);
+	int32_t saveStateInterval = l.ReadInteger(1800);
+	string basePath = l.ReadString();
+	checkminparams(1);
+	checkinitdone();
+
+	ResearchRecordingOptions options;
+	options.SaveStateIntervalFrames = (uint32_t)saveStateInterval;
+	_emu->StartResearchRecording(basePath, options);
+	return l.ReturnCount();
+}
+
+int LuaApi::StopResearchRecording(lua_State* lua)
+{
+	LuaCallHelper l(lua);
+	checkparams();
+	checkinitdone();
+	_emu->StopResearchRecording();
+	return l.ReturnCount();
+}
+
+int LuaApi::IsResearchRecording(lua_State* lua)
+{
+	LuaCallHelper l(lua);
+	checkparams();
+	l.Return(_emu->IsResearchRecording());
+	return l.ReturnCount();
 }

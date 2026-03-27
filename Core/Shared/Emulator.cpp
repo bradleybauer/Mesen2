@@ -6,6 +6,7 @@
 #include "Shared/Audio/AudioPlayerHud.h"
 #include "Shared/Video/VideoDecoder.h"
 #include "Shared/Video/VideoRenderer.h"
+#include "Utilities/Video/AviWriter.h"
 #include "Shared/Video/DebugHud.h"
 #include "Shared/FrameLimiter.h"
 #include "Shared/MessageManager.h"
@@ -250,6 +251,10 @@ void Emulator::OnBeforeSendFrame()
 void Emulator::ProcessEndOfFrame()
 {
 	if(!_isRunAheadFrame) {
+		if(_dataCollector && _dataCollector->IsRecording()) {
+			_dataCollector->CaptureFrame(this);
+		}
+
 		_frameLimiter->ProcessFrame();
 		while(_frameLimiter->WaitForNextFrame()) {
 			if(_stopFlag || _frameDelay != GetFrameDelay() || _paused || _pauseOnNextFrame || _lockCounter > 0) {
@@ -1121,6 +1126,41 @@ void Emulator::RegisterMemory(MemoryType type, void* memory, uint32_t size)
 ConsoleMemoryInfo Emulator::GetMemory(MemoryType type)
 {
 	return _consoleMemory[(int)type];
+}
+
+void Emulator::StartResearchRecording(string basePath, ResearchRecordingOptions options)
+{
+	StopResearchRecording();
+
+	_dataCollector.reset(new DataCollector());
+	if(!_dataCollector->StartRecording(basePath, this, options)) {
+		_dataCollector.reset();
+		return;
+	}
+
+	// Start AVI recording with lossless ZMBV codec
+	RecordAviOptions aviOptions = {};
+	aviOptions.Codec = VideoCodec::ZMBV;
+	aviOptions.CompressionLevel = 1;
+	aviOptions.RecordSystemHud = false;
+	aviOptions.RecordInputHud = false;
+	GetVideoRenderer()->StartRecording(basePath + ".avi", aviOptions);
+}
+
+void Emulator::StopResearchRecording()
+{
+	if(_dataCollector) {
+		_dataCollector->StopRecording();
+		_dataCollector.reset();
+	}
+	if(GetVideoRenderer()->IsRecording()) {
+		GetVideoRenderer()->StopRecording();
+	}
+}
+
+bool Emulator::IsResearchRecording()
+{
+	return _dataCollector && _dataCollector->IsRecording();
 }
 
 AudioTrackInfo Emulator::GetAudioTrackInfo()

@@ -92,6 +92,10 @@ public:
 
 	static int GetCdlData(lua_State* lua);
 
+	static int StartResearchRecording(lua_State* lua);
+	static int StopResearchRecording(lua_State* lua);
+	static int IsResearchRecording(lua_State* lua);
+
 private:
 	static FrameInfo InternalGetScreenSize();
 

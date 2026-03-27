@@ -10,6 +10,7 @@
 #include "Utilities/safe_ptr.h"
 #include "Utilities/SimpleLock.h"
 #include "Utilities/VirtualFile.h"
+#include "Core/Shared/DataCollection/DataCollector.h"
 
 class Debugger;
 class DebugHud;
@@ -85,6 +86,8 @@ private:
 	const shared_ptr<GameServer> _gameServer;
 	const shared_ptr<GameClient> _gameClient;
 	const shared_ptr<RewindManager> _rewindManager;
+
+	unique_ptr<DataCollector> _dataCollector;
 
 	thread_local static thread::id _currentThreadId;
 	thread::id _emulationThreadId;
@@ -228,6 +231,10 @@ public:
 
 	void RegisterMemory(MemoryType type, void* memory, uint32_t size);
 	ConsoleMemoryInfo GetMemory(MemoryType type);
+
+	void StartResearchRecording(string basePath, ResearchRecordingOptions options);
+	void StopResearchRecording();
+	bool IsResearchRecording();
 
 	AudioTrackInfo GetAudioTrackInfo();
 	void ProcessAudioPlayerAction(AudioPlayerActionParams p);

@@ -91,6 +91,7 @@ namespace Mesen.Utilities
 				case EmulatorShortcut.ToggleRecordVideo: ToggleRecordVideo(); break;
 				case EmulatorShortcut.ToggleRecordAudio: ToggleRecordAudio(); break;
 				case EmulatorShortcut.ToggleRecordMovie: ToggleRecordMovie(); break;
+				case EmulatorShortcut.ToggleResearchRecording: ToggleResearchRecording(); break;
 
 				case EmulatorShortcut.TakeScreenshot: EmuApi.TakeScreenshot(); break;
 				
@@ -214,6 +215,20 @@ namespace Mesen.Utilities
 					);
 					RecordApi.MovieRecord(options);
 				}
+			}
+		}
+
+		private static void ToggleResearchRecording()
+		{
+			if(!EmuApi.IsRunning()) {
+				return;
+			}
+
+			if(RecordApi.ResearchIsRecording()) {
+				RecordApi.ResearchStop();
+			} else {
+				string basePath = GetOutputFilename(ConfigManager.AviFolder, "");
+				RecordApi.ResearchRecord(basePath, new ResearchRecordingOptions() { SaveStateIntervalFrames = 1800 });
 			}
 		}
 

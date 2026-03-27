@@ -886,5 +886,7 @@ namespace Mesen.Debugger.Utilities
 		ResetProfilerData,
 		[IconFile("Copy")]
 		CopyToClipboard,
+		[IconFile("VideoRecorder")]
+		ResearchRecording,
 	}
 }

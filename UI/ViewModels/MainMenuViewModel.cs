@@ -760,6 +760,7 @@ namespace Mesen.ViewModels
 
 				GetSoundRecorderMenu(wnd),
 				GetVideoRecorderMenu(wnd),
+				GetResearchRecordingMenu(),
 
 				new ContextMenuSeparator() {
 					IsVisible = () => MainWindow.RomInfo.ConsoleType == ConsoleType.Nes
@@ -845,6 +846,15 @@ namespace Mesen.ViewModels
 						}
 					}
 				}
+			};
+		}
+
+		private MainMenuAction GetResearchRecordingMenu()
+		{
+			return new MainMenuAction(EmulatorShortcut.ToggleResearchRecording) {
+				ActionType = ActionType.ResearchRecording,
+				IsEnabled = () => IsGameRunning,
+				DynamicText = () => RecordApi.ResearchIsRecording() ? "Stop Research Recording" : "Start Research Recording",
 			};
 		}
 

@@ -3,6 +3,7 @@
 #include "Core/Shared/Video/VideoRenderer.h"
 #include "Core/Shared/Audio/SoundMixer.h"
 #include "Core/Shared/Movies/MovieManager.h"
+#include "Core/Shared/DataCollection/DataCollector.h"
 
 extern unique_ptr<Emulator> _emu;
 
@@ -21,4 +22,8 @@ extern "C"
 	DllExport bool __stdcall MoviePlaying() { return _emu->GetMovieManager()->Playing(); }
 	DllExport bool __stdcall MovieRecording() { return _emu->GetMovieManager()->Recording(); }
 	DllExport void __stdcall MovieRecord(RecordMovieOptions options) { _emu->GetMovieManager()->Record(options); }
+
+	DllExport void __stdcall ResearchRecord(char* basePath, ResearchRecordingOptions options) { _emu->StartResearchRecording(basePath, options); }
+	DllExport void __stdcall ResearchStop() { _emu->StopResearchRecording(); }
+	DllExport bool __stdcall ResearchIsRecording() { return _emu->IsResearchRecording(); }
 }
