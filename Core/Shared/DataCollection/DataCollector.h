@@ -16,14 +16,16 @@ struct ResearchRecordingOptions
 class DataCollector
 {
 private:
-	static constexpr uint32_t MdatHeaderSize = 32;
-	static constexpr char MdatMagic[4] = { 'M', 'S', 'D', 'C' };
-	static constexpr uint16_t MdatVersion = 1;
+	// NPY format: 128-byte reserved header allows up to ~10-digit frame counts
+	static constexpr uint32_t NpyReservedHeaderSize = 128;
 
 	std::thread _writerThread;
 
 	string _basePath;
-	std::ofstream _file;
+	std::ofstream _npyFrames;
+	std::ofstream _npyRam;
+	std::ofstream _npyWram;
+	std::ofstream _npyInput;
 	SimpleLock _lock;
 	AutoResetEvent _waitFrame;
 
@@ -35,7 +37,6 @@ private:
 	uint32_t _ramSize = 0;
 	uint32_t _wramSize = 0;
 	uint16_t _inputBytesPerFrame = 0;
-	uint16_t _numControllers = 0;
 	uint32_t _recordSize = 0; // 4 + _ramSize + _wramSize + _inputBytesPerFrame
 	uint32_t _startFrameNumber = 0;
 
@@ -48,7 +49,8 @@ private:
 	uint32_t _framesSinceLastSaveState = 0;
 	uint32_t _recordedFrameCount = 0;
 
-	void WriteHeader(Emulator* emu);
+	void WriteNpyHeader(std::ofstream& file, const char* descr, int ndim, const uint32_t* shape);
+	void FinalizeNpyHeaders();
 	void WriterLoop();
 	void SavePeriodicState(Emulator* emu, uint32_t frameNumber);
 

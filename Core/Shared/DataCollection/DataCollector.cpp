@@ -37,36 +37,43 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, ResearchRecor
 	_ramSize = ramInfo.Size;
 	_wramSize = wramInfo.Memory ? wramInfo.Size : 0;
 
-	// Query input layout from current controller state
-	shared_ptr<IConsole> console = emu->GetConsole();
-	if(!console) {
-		return false;
-	}
+	// Fixed 1 byte for port 1 input
+	_inputBytesPerFrame = 1;
 
-	vector<ControllerData> portStates = console->GetControlManager()->GetPortStates();
-	_numControllers = (uint16_t)portStates.size();
-	_inputBytesPerFrame = 0;
-	for(auto& controller : portStates) {
-		_inputBytesPerFrame += (uint16_t)controller.State.State.size();
-	}
-
-	// Calculate fixed record size: frame_number(4) + ram + wram + input
+	// Calculate fixed record size: frame_number(4) + ram + wram + input(1)
 	_recordSize = 4 + _ramSize + _wramSize + _inputBytesPerFrame;
 
-	// Open .mdat file
-	string mdatPath = basePath + ".mdat";
-	_file.open(mdatPath, std::ios::out | std::ios::binary);
-	if(!_file) {
-		MessageManager::DisplayMessage("ResearchRecording", "Could not open file: " + mdatPath);
+	// Open .npy files with placeholder headers (shape[0] = 0, fixed at stop)
+	_npyFrames.open(basePath + ".frames.npy", std::ios::out | std::ios::binary);
+	_npyRam.open(basePath + ".ram.npy", std::ios::out | std::ios::binary);
+	if(_wramSize > 0) {
+		_npyWram.open(basePath + ".wram.npy", std::ios::out | std::ios::binary);
+	}
+	if(_inputBytesPerFrame > 0) {
+		_npyInput.open(basePath + ".input.npy", std::ios::out | std::ios::binary);
+	}
+
+	if(!_npyFrames || !_npyRam) {
+		MessageManager::DisplayMessage("ResearchRecording", "Could not open npy files: " + basePath);
 		return false;
+	}
+
+	// Write placeholder npy headers (N=0, will be rewritten at stop)
+	uint32_t zeroShape1[] = { 0 };
+	uint32_t zeroShape2[] = { 0, _ramSize };
+	WriteNpyHeader(_npyFrames, "<u4", 1, zeroShape1);
+	WriteNpyHeader(_npyRam, "|u1", 2, zeroShape2);
+	if(_wramSize > 0) {
+		uint32_t wramShape[] = { 0, _wramSize };
+		WriteNpyHeader(_npyWram, "|u1", 2, wramShape);
+	}
+	if(_inputBytesPerFrame > 0) {
+		WriteNpyHeader(_npyInput, "|u1", 1, zeroShape1);
 	}
 
 	_startFrameNumber = emu->GetFrameCount();
 	_framesSinceLastSaveState = 0;
 	_recordedFrameCount = 0;
-
-	// Write header
-	WriteHeader(emu);
 
 	// Save initial save state
 	string mssPath = basePath + ".mss";
@@ -93,45 +100,71 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, ResearchRecor
 	return true;
 }
 
-void DataCollector::WriteHeader(Emulator* emu)
+void DataCollector::WriteNpyHeader(std::ofstream& file, const char* descr, int ndim, const uint32_t* shape)
 {
-	uint8_t header[MdatHeaderSize] = {};
+	// NPY v1.0 format: 6-byte magic + 2-byte version + 2-byte header_len + header_data
+	// Total = NpyReservedHeaderSize (128 bytes, 64-byte aligned)
+	uint8_t header[NpyReservedHeaderSize] = {};
 
-	// [0-3] magic "MSDC"
-	memcpy(header + 0, MdatMagic, 4);
+	// Magic: \x93NUMPY
+	header[0] = 0x93;
+	header[1] = 'N'; header[2] = 'U'; header[3] = 'M'; header[4] = 'P'; header[5] = 'Y';
 
-	// [4-5] version
-	uint16_t version = MdatVersion;
-	memcpy(header + 4, &version, 2);
+	// Version 1.0
+	header[6] = 1; header[7] = 0;
 
-	// [6-7] console_type
-	uint16_t consoleType = (uint16_t)emu->GetConsoleType();
-	memcpy(header + 6, &consoleType, 2);
+	// Header data length = total - 10 (magic + version + header_len fields)
+	uint16_t headerLen = NpyReservedHeaderSize - 10;
+	memcpy(header + 8, &headerLen, 2);
 
-	// [8-11] ram_size
-	memcpy(header + 8, &_ramSize, 4);
+	// Build Python dict literal
+	char dictBuf[118];
+	memset(dictBuf, ' ', 118);
 
-	// [12-15] wram_size
-	memcpy(header + 12, &_wramSize, 4);
+	int pos;
+	if(ndim == 1) {
+		pos = snprintf(dictBuf, 118,
+			"{'descr': '%s', 'fortran_order': False, 'shape': (%u,), }", descr, shape[0]);
+	} else {
+		pos = snprintf(dictBuf, 118,
+			"{'descr': '%s', 'fortran_order': False, 'shape': (%u, %u), }", descr, shape[0], shape[1]);
+	}
+	// snprintf null-terminates; replace null with space, end with newline
+	if(pos > 0 && pos < 117) dictBuf[pos] = ' ';
+	dictBuf[117] = '\n';
 
-	// [16-17] input_bytes_per_frame
-	memcpy(header + 16, &_inputBytesPerFrame, 2);
+	memcpy(header + 10, dictBuf, 118);
+	file.write(reinterpret_cast<char*>(header), NpyReservedHeaderSize);
+	file.flush();
+}
 
-	// [18-19] num_controllers
-	memcpy(header + 18, &_numControllers, 2);
+void DataCollector::FinalizeNpyHeaders()
+{
+	uint32_t N = _recordedFrameCount;
 
-	// [20-23] start_frame_number
-	memcpy(header + 20, &_startFrameNumber, 4);
+	if(_npyFrames.is_open()) {
+		_npyFrames.seekp(0);
+		uint32_t shape[] = { N };
+		WriteNpyHeader(_npyFrames, "<u4", 1, shape);
+	}
 
-	// [24-27] fps_times_1000
-	uint32_t fpsX1000 = (uint32_t)(emu->GetFps() * 1000.0);
-	memcpy(header + 24, &fpsX1000, 4);
+	if(_npyRam.is_open()) {
+		_npyRam.seekp(0);
+		uint32_t shape[] = { N, _ramSize };
+		WriteNpyHeader(_npyRam, "|u1", 2, shape);
+	}
 
-	// [28-31] reserved
-	// already zero from initialization
+	if(_npyWram.is_open()) {
+		_npyWram.seekp(0);
+		uint32_t shape[] = { N, _wramSize };
+		WriteNpyHeader(_npyWram, "|u1", 2, shape);
+	}
 
-	_file.write(reinterpret_cast<char*>(header), MdatHeaderSize);
-	_file.flush();
+	if(_npyInput.is_open()) {
+		_npyInput.seekp(0);
+		uint32_t shape[] = { N };
+		WriteNpyHeader(_npyInput, "|u1", 1, shape);
+	}
 }
 
 void DataCollector::WriterLoop()
@@ -143,14 +176,35 @@ void DataCollector::WriterLoop()
 		}
 
 		auto lock = _lock.AcquireSafe();
-		_file.write(reinterpret_cast<char*>(_writeBuffer.data()), _recordSize);
+		uint32_t offset = 0;
+
+		// Frame number (4 bytes, uint32 LE)
+		_npyFrames.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), 4);
+		offset += 4;
+
+		// RAM
+		_npyRam.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), _ramSize);
+		offset += _ramSize;
+
+		// WRAM
+		if(_wramSize > 0) {
+			_npyWram.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), _wramSize);
+			offset += _wramSize;
+		}
+
+		// Input
+		if(_inputBytesPerFrame > 0) {
+			_npyInput.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), _inputBytesPerFrame);
+		}
+
 		_framePending = false;
 	}
 
 	// Flush remaining data
-	if(_file.is_open()) {
-		_file.flush();
-	}
+	if(_npyFrames.is_open()) _npyFrames.flush();
+	if(_npyRam.is_open()) _npyRam.flush();
+	if(_npyWram.is_open()) _npyWram.flush();
+	if(_npyInput.is_open()) _npyInput.flush();
 }
 
 void DataCollector::CaptureFrame(Emulator* emu)
@@ -184,25 +238,20 @@ void DataCollector::CaptureFrame(Emulator* emu)
 	}
 	offset += _wramSize;
 
-	// Pack input state
-	if(_inputBytesPerFrame > 0) {
+	// Pack port 1 input (1 byte)
+	{
 		shared_ptr<IConsole> console = emu->GetConsole();
 		if(console) {
 			vector<ControllerData> portStates = console->GetControlManager()->GetPortStates();
-			uint32_t inputOffset = offset;
-			for(auto& controller : portStates) {
-				uint16_t stateSize = (uint16_t)controller.State.State.size();
-				if(inputOffset + stateSize <= _recordSize) {
-					memcpy(_captureBuffer.data() + inputOffset, controller.State.State.data(), stateSize);
-					inputOffset += stateSize;
+			_captureBuffer[offset] = 0;
+			for(auto& ctrl : portStates) {
+				if(ctrl.Port == 0 && !ctrl.State.State.empty()) {
+					_captureBuffer[offset] = ctrl.State.State[0];
+					break;
 				}
 			}
-			// Zero any remaining input bytes if controllers changed
-			if(inputOffset < offset + _inputBytesPerFrame) {
-				memset(_captureBuffer.data() + inputOffset, 0, offset + _inputBytesPerFrame - inputOffset);
-			}
 		} else {
-			memset(_captureBuffer.data() + offset, 0, _inputBytesPerFrame);
+			_captureBuffer[offset] = 0;
 		}
 	}
 
@@ -253,10 +302,14 @@ void DataCollector::StopRecording()
 	_waitFrame.Signal();
 	_writerThread.join();
 
-	// Close file
-	if(_file.is_open()) {
-		_file.close();
-	}
+	// Rewrite npy headers with actual frame count
+	FinalizeNpyHeaders();
+
+	// Close files
+	if(_npyFrames.is_open()) _npyFrames.close();
+	if(_npyRam.is_open()) _npyRam.close();
+	if(_npyWram.is_open()) _npyWram.close();
+	if(_npyInput.is_open()) _npyInput.close();
 
 	MessageManager::DisplayMessage("ResearchRecording", "Stopped. Frames: " + std::to_string(_recordedFrameCount));
 }
