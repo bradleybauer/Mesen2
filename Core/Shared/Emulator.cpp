@@ -144,6 +144,11 @@ void Emulator::Run()
 			ProcessSystemActions();
 		}
 
+		// Process deferred DataCollector save state at instruction boundary
+		if(_dataCollector && _dataCollector->IsRecording()) {
+			_dataCollector->ProcessPendingSaveState(this);
+		}
+
 		ProcessAutoSaveState();
 
 		WaitForLock();

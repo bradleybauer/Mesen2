@@ -30,6 +30,7 @@ public class CommandLineHelper
 	public string? MovieToRecord { get; private set; } = null;
 	public int TestRunnerTimeout { get; private set; } = 100;
 	public List<string> LuaScriptsToLoad { get; private set; } = new();
+	public List<string> SaveStatesToLoad { get; private set; } = new();
 	public List<string> FilesToLoad { get; private set; } = new();
 
 	private List<string> _errorMessages = new();
@@ -52,6 +53,7 @@ public class CommandLineHelper
 			if(File.Exists(absPath)) {
 				switch(Path.GetExtension(absPath).ToLowerInvariant()) {
 					case ".lua": LuaScriptsToLoad.Add(absPath); break;
+					case ".mss": SaveStatesToLoad.Add(absPath); break;
 					default: FilesToLoad.Add(absPath); break;
 				}
 			} else if(arg.StartsWith("-") || arg.StartsWith("/")) {
@@ -130,21 +132,21 @@ public class CommandLineHelper
 
 	public void ProcessPostLoadCommandSwitches(MainWindow wnd)
 	{
+		// Load save states first (before Lua scripts) so the emulator
+		// is in the correct state when scripts' callbacks fire.
+		if(SaveStatesToLoad.Count > 0) {
+			foreach(string mssFile in SaveStatesToLoad) {
+				EmuApi.LoadStateFile(mssFile);
+			}
+		}
+
 		if(LuaScriptsToLoad.Count > 0) {
 			foreach(string luaScript in LuaScriptsToLoad) {
-				ScriptWindow? existingWnd = DebugWindowManager.GetDebugWindow<ScriptWindow>(wnd => !string.IsNullOrWhiteSpace(wnd.Model.FilePath) && Path.GetFullPath(wnd.Model.FilePath) == Path.GetFullPath(luaScript));
-				if(existingWnd != null) {
-					//Script is already opened, skip it
-					continue;
-				}
-
-				ScriptWindowViewModel model = new(null);
-				model.LoadScript(luaScript);
-				DebugWindowManager.OpenDebugWindow(() => new ScriptWindow(model));
+				try {
+					string script = File.ReadAllText(luaScript);
+					DebugApi.LoadScript(luaScript, Path.GetDirectoryName(luaScript) ?? Program.OriginalFolder, script);
+				} catch { }
 			}
-
-			//Shift focus back to main window after opening the script window(s)
-			wnd.BringToFront();
 		}
 
 		if(MovieToRecord != null) {

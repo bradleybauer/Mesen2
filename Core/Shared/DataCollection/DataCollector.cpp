@@ -270,13 +270,21 @@ void DataCollector::CaptureFrame(Emulator* emu)
 
 	_recordedFrameCount++;
 
-	// Periodic save state
+	// Periodic save state - defer to instruction boundary (not safe to save mid-instruction)
 	if(_options.SaveStateIntervalFrames > 0) {
 		_framesSinceLastSaveState++;
 		if(_framesSinceLastSaveState >= _options.SaveStateIntervalFrames) {
-			SavePeriodicState(emu, frameNumber);
+			_pendingSaveFrameNumber = frameNumber;
+			_pendingSaveState = true;
 			_framesSinceLastSaveState = 0;
 		}
+	}
+}
+
+void DataCollector::ProcessPendingSaveState(Emulator* emu)
+{
+	if(_pendingSaveState.exchange(false)) {
+		SavePeriodicState(emu, _pendingSaveFrameNumber);
 	}
 }
 

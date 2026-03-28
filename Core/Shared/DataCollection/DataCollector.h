@@ -49,6 +49,10 @@ private:
 	uint32_t _framesSinceLastSaveState = 0;
 	uint32_t _recordedFrameCount = 0;
 
+	// Deferred save state (must be saved at instruction boundary, not mid-instruction)
+	atomic<bool> _pendingSaveState{false};
+	uint32_t _pendingSaveFrameNumber = 0;
+
 	void WriteNpyHeader(std::ofstream& file, const char* descr, int ndim, const uint32_t* shape);
 	void FinalizeNpyHeaders();
 	void WriterLoop();
@@ -60,6 +64,7 @@ public:
 
 	bool StartRecording(string basePath, Emulator* emu, RecordingOptions options);
 	void CaptureFrame(Emulator* emu);
+	void ProcessPendingSaveState(Emulator* emu);
 	void StopRecording();
 	bool IsRecording();
 };
