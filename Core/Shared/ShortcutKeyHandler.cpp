@@ -155,7 +155,7 @@ bool ShortcutKeyHandler::IsShortcutAllowed(EmulatorShortcut shortcut, uint32_t s
 			return isRunning && !isNetplayClient;
 
 		case EmulatorShortcut::TakeScreenshot:
-		case EmulatorShortcut::ToggleResearchRecording:
+		case EmulatorShortcut::ToggleDataRecording:
 			return isRunning;
 
 		case EmulatorShortcut::ToggleCheats:

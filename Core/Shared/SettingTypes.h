@@ -1034,7 +1034,7 @@ enum class EmulatorShortcut
 	StartRecordHdPack,
 	StopRecordHdPack,
 
-	ToggleResearchRecording,
+	ToggleDataRecording,
 
 	ShortcutCount,
 };

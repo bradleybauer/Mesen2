@@ -1942,7 +1942,7 @@ E
 			<Value ID="ToggleRecordVideo">Start/Stop Recording Video</Value>
 			<Value ID="ToggleRecordAudio">Start/Stop Recording Audio</Value>
 			<Value ID="ToggleRecordMovie">Start/Stop Recording Movie</Value>
-			<Value ID="ToggleResearchRecording">Toggle Research Recording</Value>
+			<Value ID="ToggleDataRecording">Toggle Data Recording</Value>
 
 			<Value ID="MaxSpeed">Toggle Maximum Speed</Value>
 			<Value ID="SaveStateSlot1">Save State - Slot 1</Value>
@@ -3529,7 +3529,7 @@ E
 			<Value ID="Stop">Stop</Value>
 			<Value ID="SoundRecorder">Sound Recorder</Value>
 			<Value ID="VideoRecorder">Video Recorder</Value>
-			<Value ID="ResearchRecording">Research Recording</Value>
+			<Value ID="DataRecording">Data Recording</Value>
 			<Value ID="Cheats">Cheats</Value>
 			<Value ID="LogWindow">Log Window</Value>
 			<Value ID="HdPacks">HD Packs (NES)</Value>

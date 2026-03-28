@@ -26,9 +26,9 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool MoviePlaying();
 		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool MovieRecording();
 
-		[DllImport(DllPath)] public static extern void ResearchRecord([MarshalAs(UnmanagedType.LPUTF8Str)]string basePath, ResearchRecordingOptions options);
-		[DllImport(DllPath)] public static extern void ResearchStop();
-		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool ResearchIsRecording();
+		[DllImport(DllPath)] public static extern void DataRecord([MarshalAs(UnmanagedType.LPUTF8Str)]string basePath, RecordingOptions options);
+		[DllImport(DllPath)] public static extern void DataStop();
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool DataIsRecording();
 	}
 
 	public enum RecordMovieFrom
@@ -81,7 +81,7 @@ namespace Mesen.Interop
 		[MarshalAs(UnmanagedType.I1)] public bool RecordInputHud;
 	};
 
-	public struct ResearchRecordingOptions
+	public struct RecordingOptions
 	{
 		public UInt32 SaveStateIntervalFrames;
 	};

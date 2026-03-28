@@ -232,9 +232,9 @@ public:
 	void RegisterMemory(MemoryType type, void* memory, uint32_t size);
 	ConsoleMemoryInfo GetMemory(MemoryType type);
 
-	void StartResearchRecording(string basePath, ResearchRecordingOptions options);
-	void StopResearchRecording();
-	bool IsResearchRecording();
+	void StartDataRecording(string basePath, RecordingOptions options);
+	void StopDataRecording();
+	bool IsDataRecording();
 
 	AudioTrackInfo GetAudioTrackInfo();
 	void ProcessAudioPlayerAction(AudioPlayerActionParams p);

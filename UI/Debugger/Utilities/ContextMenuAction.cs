@@ -887,6 +887,6 @@ namespace Mesen.Debugger.Utilities
 		[IconFile("Copy")]
 		CopyToClipboard,
 		[IconFile("VideoRecorder")]
-		ResearchRecording,
+		DataRecording,
 	}
 }

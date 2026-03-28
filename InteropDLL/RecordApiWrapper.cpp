@@ -23,7 +23,7 @@ extern "C"
 	DllExport bool __stdcall MovieRecording() { return _emu->GetMovieManager()->Recording(); }
 	DllExport void __stdcall MovieRecord(RecordMovieOptions options) { _emu->GetMovieManager()->Record(options); }
 
-	DllExport void __stdcall ResearchRecord(char* basePath, ResearchRecordingOptions options) { _emu->StartResearchRecording(basePath, options); }
-	DllExport void __stdcall ResearchStop() { _emu->StopResearchRecording(); }
-	DllExport bool __stdcall ResearchIsRecording() { return _emu->IsResearchRecording(); }
+	DllExport void __stdcall DataRecord(char* basePath, RecordingOptions options) { _emu->StartDataRecording(basePath, options); }
+	DllExport void __stdcall DataStop() { _emu->StopDataRecording(); }
+	DllExport bool __stdcall DataIsRecording() { return _emu->IsDataRecording(); }
 }

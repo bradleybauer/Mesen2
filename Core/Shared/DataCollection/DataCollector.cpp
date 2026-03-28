@@ -21,7 +21,7 @@ DataCollector::~DataCollector()
 	}
 }
 
-bool DataCollector::StartRecording(string basePath, Emulator* emu, ResearchRecordingOptions options)
+bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOptions options)
 {
 	if(_recording) {
 		return false;
@@ -54,7 +54,7 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, ResearchRecor
 	}
 
 	if(!_npyFrames || !_npyRam) {
-		MessageManager::DisplayMessage("ResearchRecording", "Could not open npy files: " + basePath);
+		MessageManager::DisplayMessage("DataRecording", "Could not open npy files: " + basePath);
 		return false;
 	}
 
@@ -96,7 +96,7 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, ResearchRecor
 
 	_recording = true;
 
-	MessageManager::DisplayMessage("ResearchRecording", "Started: " + basePath);
+	MessageManager::DisplayMessage("DataRecording", "Started: " + basePath);
 	return true;
 }
 
@@ -311,7 +311,7 @@ void DataCollector::StopRecording()
 	if(_npyWram.is_open()) _npyWram.close();
 	if(_npyInput.is_open()) _npyInput.close();
 
-	MessageManager::DisplayMessage("ResearchRecording", "Stopped. Frames: " + std::to_string(_recordedFrameCount));
+	MessageManager::DisplayMessage("DataRecording", "Stopped. Frames: " + std::to_string(_recordedFrameCount));
 }
 
 bool DataCollector::IsRecording()

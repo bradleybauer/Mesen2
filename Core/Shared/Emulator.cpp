@@ -1128,9 +1128,9 @@ ConsoleMemoryInfo Emulator::GetMemory(MemoryType type)
 	return _consoleMemory[(int)type];
 }
 
-void Emulator::StartResearchRecording(string basePath, ResearchRecordingOptions options)
+void Emulator::StartDataRecording(string basePath, RecordingOptions options)
 {
-	StopResearchRecording();
+	StopDataRecording();
 
 	_dataCollector.reset(new DataCollector());
 	if(!_dataCollector->StartRecording(basePath, this, options)) {
@@ -1147,7 +1147,7 @@ void Emulator::StartResearchRecording(string basePath, ResearchRecordingOptions 
 	GetVideoRenderer()->StartRecording(basePath + ".avi", aviOptions);
 }
 
-void Emulator::StopResearchRecording()
+void Emulator::StopDataRecording()
 {
 	if(_dataCollector) {
 		_dataCollector->StopRecording();
@@ -1158,7 +1158,7 @@ void Emulator::StopResearchRecording()
 	}
 }
 
-bool Emulator::IsResearchRecording()
+bool Emulator::IsDataRecording()
 {
 	return _dataCollector && _dataCollector->IsRecording();
 }

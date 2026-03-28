@@ -159,9 +159,9 @@ int LuaApi::GetLibrary(lua_State *lua)
 		{ "getRomInfo", LuaApi::GetRomInfo },
 		{ "getLogWindowLog", LuaApi::GetLogWindowLog },
 
-		{ "startResearchRecording", LuaApi::StartResearchRecording },
-		{ "stopResearchRecording", LuaApi::StopResearchRecording },
-		{ "isResearchRecording", LuaApi::IsResearchRecording },
+		{ "startDataRecording", LuaApi::StartDataRecording },
+		{ "stopDataRecording", LuaApi::StopDataRecording },
+		{ "isDataRecording", LuaApi::IsDataRecording },
 		{ NULL,NULL }
 	};
 
@@ -1152,7 +1152,7 @@ int LuaApi::SetState(lua_State* lua)
 	return 0;
 }
 
-int LuaApi::StartResearchRecording(lua_State* lua)
+int LuaApi::StartDataRecording(lua_State* lua)
 {
 	LuaCallHelper l(lua);
 	int32_t saveStateInterval = l.ReadInteger(1800);
@@ -1160,25 +1160,25 @@ int LuaApi::StartResearchRecording(lua_State* lua)
 	checkminparams(1);
 	checkinitdone();
 
-	ResearchRecordingOptions options;
+	RecordingOptions options;
 	options.SaveStateIntervalFrames = (uint32_t)saveStateInterval;
-	_emu->StartResearchRecording(basePath, options);
+	_emu->StartDataRecording(basePath, options);
 	return l.ReturnCount();
 }
 
-int LuaApi::StopResearchRecording(lua_State* lua)
+int LuaApi::StopDataRecording(lua_State* lua)
 {
 	LuaCallHelper l(lua);
 	checkparams();
 	checkinitdone();
-	_emu->StopResearchRecording();
+	_emu->StopDataRecording();
 	return l.ReturnCount();
 }
 
-int LuaApi::IsResearchRecording(lua_State* lua)
+int LuaApi::IsDataRecording(lua_State* lua)
 {
 	LuaCallHelper l(lua);
 	checkparams();
-	l.Return(_emu->IsResearchRecording());
+	l.Return(_emu->IsDataRecording());
 	return l.ReturnCount();
 }

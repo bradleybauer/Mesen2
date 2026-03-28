@@ -8,7 +8,7 @@
 
 class Emulator;
 
-struct ResearchRecordingOptions
+struct RecordingOptions
 {
 	uint32_t SaveStateIntervalFrames = 60; // 1 Hz at 60fps, 0 = disabled
 };
@@ -45,7 +45,7 @@ private:
 	vector<uint8_t> _writeBuffer;
 
 	// Periodic save states
-	ResearchRecordingOptions _options;
+	RecordingOptions _options;
 	uint32_t _framesSinceLastSaveState = 0;
 	uint32_t _recordedFrameCount = 0;
 
@@ -58,7 +58,7 @@ public:
 	DataCollector();
 	~DataCollector();
 
-	bool StartRecording(string basePath, Emulator* emu, ResearchRecordingOptions options);
+	bool StartRecording(string basePath, Emulator* emu, RecordingOptions options);
 	void CaptureFrame(Emulator* emu);
 	void StopRecording();
 	bool IsRecording();
