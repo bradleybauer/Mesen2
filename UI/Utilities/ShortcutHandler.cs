@@ -227,7 +227,7 @@ namespace Mesen.Utilities
 			if(RecordApi.DataIsRecording()) {
 				RecordApi.DataStop();
 			} else {
-				string dataDir = Path.Combine(Program.OriginalFolder, "data");
+				string dataDir = Path.Combine(Program.OriginalFolder, "data", "raw");
 				Directory.CreateDirectory(dataDir);
 				string basePath = GetOutputFilename(dataDir, "");
 				RecordApi.DataRecord(basePath, new RecordingOptions() { SaveStateIntervalFrames = 60 });
