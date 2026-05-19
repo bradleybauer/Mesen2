@@ -3,10 +3,13 @@
 #include <thread>
 #include "Utilities/AutoResetEvent.h"
 #include "Utilities/SimpleLock.h"
+#include "Core/Shared/CpuType.h"
+#include "Core/Shared/MemoryType.h"
 #include "Core/Shared/SettingTypes.h"
 #include "Core/Shared/ControlDeviceState.h"
 
 class Emulator;
+class MemoryDumper;
 
 struct RecordingOptions
 {
@@ -26,6 +29,7 @@ private:
 	std::ofstream _npyRam;
 	std::ofstream _npyWram;
 	std::ofstream _npyInput;
+	std::ofstream _npySpriteMask;
 	SimpleLock _lock;
 	AutoResetEvent _waitFrame;
 
@@ -37,12 +41,23 @@ private:
 	uint32_t _ramSize = 0;
 	uint32_t _wramSize = 0;
 	uint16_t _inputBytesPerFrame = 0;
-	uint32_t _recordSize = 0; // 4 + _ramSize + _wramSize + _inputBytesPerFrame
+	bool _recordSpriteMask = false;
+	CpuType _spriteMaskCpuType = CpuType::Nes;
+	uint32_t _spriteMaskWidth = 0;
+	uint32_t _spriteMaskHeight = 0;
+	uint32_t _spriteMaskSize = 0;
+	uint32_t _recordSize = 0; // 4 + _ramSize + _wramSize + _inputBytesPerFrame + optional sprite mask
 	uint32_t _startFrameNumber = 0;
 
 	// Double-buffer: emulation thread writes to _captureBuffer, writer thread reads from _writeBuffer
 	vector<uint8_t> _captureBuffer;
 	vector<uint8_t> _writeBuffer;
+	vector<uint8_t> _spriteVramBuffer;
+	vector<uint8_t> _spriteRamBuffer;
+	vector<uint64_t> _ppuStateBuffer;
+	vector<uint64_t> _ppuToolsStateBuffer;
+	vector<uint32_t> _spritePreviews;
+	vector<uint32_t> _spriteScreenPreview;
 
 	// Periodic save states
 	RecordingOptions _options;
@@ -57,6 +72,9 @@ private:
 	void FinalizeNpyHeaders();
 	void WriterLoop();
 	void SavePeriodicState(Emulator* emu, uint32_t frameNumber);
+	bool InitializeSpriteMaskRecording(Emulator* emu);
+	bool CaptureSpriteMask(Emulator* emu, uint8_t* output);
+	void ReadCombinedMemoryState(MemoryDumper* memoryDumper, MemoryType baseType, MemoryType extType, vector<uint8_t>& output);
 
 public:
 	DataCollector();

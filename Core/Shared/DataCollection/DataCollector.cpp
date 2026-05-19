@@ -1,11 +1,105 @@
 #include "pch.h"
 #include "DataCollector.h"
 #include "Core/Shared/Emulator.h"
+#include "Core/Shared/DebuggerRequest.h"
 #include "Core/Shared/Interfaces/IConsole.h"
 #include "Core/Shared/BaseControlManager.h"
 #include "Core/Shared/SaveStateManager.h"
 #include "Core/Shared/MessageManager.h"
+#include "Core/Debugger/Debugger.h"
+#include "Core/Debugger/MemoryDumper.h"
+#include "Core/Debugger/PpuTools.h"
+#include "Core/SNES/Debugger/SnesPpuTools.h"
+#include "Core/SNES/SnesPpuTypes.h"
+#include "Core/Gameboy/GbTypes.h"
+#include "Core/NES/Debugger/NesPpuTools.h"
+#include "Core/NES/NesTypes.h"
+#include "Core/PCE/PceTypes.h"
+#include "Core/SMS/SmsTypes.h"
+#include "Core/GBA/GbaTypes.h"
+#include "Core/WS/WsTypes.h"
 #include "Utilities/FolderUtilities.h"
+
+namespace
+{
+	static constexpr uint32_t SpritePreviewSize = 128 * 128;
+
+	MemoryType GetVramMemoryType(CpuType cpuType, bool getExtendedRam = false)
+	{
+		switch(cpuType) {
+			case CpuType::Snes: return MemoryType::SnesVideoRam;
+			case CpuType::Gameboy: return MemoryType::GbVideoRam;
+			case CpuType::Nes: return MemoryType::NesPpuMemory;
+			case CpuType::Pce: return getExtendedRam ? MemoryType::PceVideoRamVdc2 : MemoryType::PceVideoRam;
+			case CpuType::Sms: return MemoryType::SmsVideoRam;
+			case CpuType::Gba: return MemoryType::GbaVideoRam;
+			case CpuType::Ws: return MemoryType::WsWorkRam;
+			default: return MemoryType::None;
+		}
+	}
+
+	MemoryType GetSpriteRamMemoryType(CpuType cpuType, bool getExtendedRam = false)
+	{
+		switch(cpuType) {
+			case CpuType::Snes: return MemoryType::SnesSpriteRam;
+			case CpuType::Gameboy: return MemoryType::GbSpriteRam;
+			case CpuType::Nes: return MemoryType::NesSpriteRam;
+			case CpuType::Pce: return getExtendedRam ? MemoryType::PceSpriteRamVdc2 : MemoryType::PceSpriteRam;
+			case CpuType::Gba: return MemoryType::GbaSpriteRam;
+			default: return MemoryType::None;
+		}
+	}
+
+	uint32_t GetPpuStateSize(CpuType cpuType)
+	{
+		switch(cpuType) {
+			case CpuType::Snes:
+			case CpuType::Spc:
+			case CpuType::NecDsp:
+			case CpuType::Sa1:
+			case CpuType::Gsu:
+			case CpuType::Cx4:
+			case CpuType::St018:
+				return sizeof(SnesPpuState);
+
+			case CpuType::Gameboy: return sizeof(GbPpuState);
+			case CpuType::Nes: return sizeof(NesPpuState);
+			case CpuType::Pce: return sizeof(PceVideoState);
+			case CpuType::Sms: return sizeof(SmsVdpState);
+			case CpuType::Gba: return sizeof(GbaPpuState);
+			case CpuType::Ws: return sizeof(WsPpuState);
+		}
+
+		return sizeof(BaseState);
+	}
+
+	uint32_t GetPpuToolsStateSize(CpuType cpuType)
+	{
+		switch(cpuType) {
+			case CpuType::Snes:
+			case CpuType::Spc:
+			case CpuType::NecDsp:
+			case CpuType::Sa1:
+			case CpuType::Gsu:
+			case CpuType::Cx4:
+			case CpuType::St018:
+				return sizeof(SnesPpuToolsState);
+
+			case CpuType::Nes: return sizeof(NesPpuToolsState);
+			default: return sizeof(BaseState);
+		}
+	}
+
+	void ResizeStateBuffer(vector<uint64_t>& buffer, uint32_t byteSize)
+	{
+		buffer.resize((byteSize + sizeof(uint64_t) - 1) / sizeof(uint64_t));
+	}
+
+	BaseState& AsBaseState(vector<uint64_t>& buffer)
+	{
+		return *reinterpret_cast<BaseState*>(buffer.data());
+	}
+}
 
 DataCollector::DataCollector()
 {
@@ -39,9 +133,10 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 
 	// Fixed 1 byte for port 1 input
 	_inputBytesPerFrame = 1;
+	_recordSpriteMask = InitializeSpriteMaskRecording(emu);
 
-	// Calculate fixed record size: frame_number(4) + ram + wram + input(1)
-	_recordSize = 4 + _ramSize + _wramSize + _inputBytesPerFrame;
+	// Calculate fixed record size: frame_number(4) + ram + wram + input(1) + optional sprite mask
+	_recordSize = 4 + _ramSize + _wramSize + _inputBytesPerFrame + (_recordSpriteMask ? _spriteMaskSize : 0);
 
 	// Open .npy files with placeholder headers (shape[0] = 0, fixed at stop)
 	_npyFrames.open(basePath + ".frames.npy", std::ios::out | std::ios::binary);
@@ -52,8 +147,11 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 	if(_inputBytesPerFrame > 0) {
 		_npyInput.open(basePath + ".input.npy", std::ios::out | std::ios::binary);
 	}
+	if(_recordSpriteMask) {
+		_npySpriteMask.open(basePath + ".sprite_mask.npy", std::ios::out | std::ios::binary);
+	}
 
-	if(!_npyFrames || !_npyRam) {
+	if(!_npyFrames || !_npyRam || (_recordSpriteMask && !_npySpriteMask)) {
 		MessageManager::DisplayMessage("DataRecording", "Could not open npy files: " + basePath);
 		return false;
 	}
@@ -69,6 +167,10 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 	}
 	if(_inputBytesPerFrame > 0) {
 		WriteNpyHeader(_npyInput, "|u1", 1, zeroShape1);
+	}
+	if(_recordSpriteMask) {
+		uint32_t spriteMaskShape[] = { 0, _spriteMaskHeight, _spriteMaskWidth };
+		WriteNpyHeader(_npySpriteMask, "|b1", 3, spriteMaskShape);
 	}
 
 	_startFrameNumber = emu->GetFrameCount();
@@ -125,9 +227,12 @@ void DataCollector::WriteNpyHeader(std::ofstream& file, const char* descr, int n
 	if(ndim == 1) {
 		pos = snprintf(dictBuf, 118,
 			"{'descr': '%s', 'fortran_order': False, 'shape': (%u,), }", descr, shape[0]);
-	} else {
+	} else if(ndim == 2) {
 		pos = snprintf(dictBuf, 118,
 			"{'descr': '%s', 'fortran_order': False, 'shape': (%u, %u), }", descr, shape[0], shape[1]);
+	} else {
+		pos = snprintf(dictBuf, 118,
+			"{'descr': '%s', 'fortran_order': False, 'shape': (%u, %u, %u), }", descr, shape[0], shape[1], shape[2]);
 	}
 	// snprintf null-terminates; replace null with space, end with newline
 	if(pos > 0 && pos < 117) dictBuf[pos] = ' ';
@@ -165,6 +270,12 @@ void DataCollector::FinalizeNpyHeaders()
 		uint32_t shape[] = { N };
 		WriteNpyHeader(_npyInput, "|u1", 1, shape);
 	}
+
+	if(_npySpriteMask.is_open()) {
+		_npySpriteMask.seekp(0);
+		uint32_t shape[] = { N, _spriteMaskHeight, _spriteMaskWidth };
+		WriteNpyHeader(_npySpriteMask, "|b1", 3, shape);
+	}
 }
 
 void DataCollector::WriterLoop()
@@ -195,6 +306,12 @@ void DataCollector::WriterLoop()
 		// Input
 		if(_inputBytesPerFrame > 0) {
 			_npyInput.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), _inputBytesPerFrame);
+			offset += _inputBytesPerFrame;
+		}
+
+		// PPU sprite mask
+		if(_recordSpriteMask) {
+			_npySpriteMask.write(reinterpret_cast<char*>(_writeBuffer.data() + offset), _spriteMaskSize);
 		}
 
 		_framePending = false;
@@ -205,6 +322,149 @@ void DataCollector::WriterLoop()
 	if(_npyRam.is_open()) _npyRam.flush();
 	if(_npyWram.is_open()) _npyWram.flush();
 	if(_npyInput.is_open()) _npyInput.flush();
+	if(_npySpriteMask.is_open()) _npySpriteMask.flush();
+}
+
+bool DataCollector::InitializeSpriteMaskRecording(Emulator* emu)
+{
+	_recordSpriteMask = false;
+	_spriteMaskWidth = 0;
+	_spriteMaskHeight = 0;
+	_spriteMaskSize = 0;
+
+	DebuggerRequest dbgRequest = emu->GetDebugger(true);
+	Debugger* debugger = dbgRequest.GetDebugger();
+	if(!debugger) {
+		return false;
+	}
+
+	CpuType cpuType = debugger->GetMainCpuType();
+	PpuTools* ppuTools = debugger->GetPpuTools(cpuType);
+	if(!ppuTools) {
+		return false;
+	}
+
+	ResizeStateBuffer(_ppuStateBuffer, GetPpuStateSize(cpuType));
+	ResizeStateBuffer(_ppuToolsStateBuffer, GetPpuToolsStateSize(cpuType));
+	debugger->GetPpuState(AsBaseState(_ppuStateBuffer), cpuType);
+	ppuTools->GetPpuToolsState(AsBaseState(_ppuToolsStateBuffer));
+
+	GetSpritePreviewOptions options = {};
+	options.Background = SpriteBackground::Transparent;
+	DebugSpritePreviewInfo previewInfo = ppuTools->GetSpritePreviewInfo(options, AsBaseState(_ppuStateBuffer), AsBaseState(_ppuToolsStateBuffer));
+	if(previewInfo.VisibleWidth == 0 || previewInfo.VisibleHeight == 0) {
+		return false;
+	}
+
+	_spriteMaskCpuType = cpuType;
+	_spriteMaskWidth = previewInfo.VisibleWidth;
+	_spriteMaskHeight = previewInfo.VisibleHeight;
+	_spriteMaskSize = _spriteMaskWidth * _spriteMaskHeight;
+	_recordSpriteMask = true;
+
+	MessageManager::DisplayMessage(
+		"DataRecording",
+		"PPU sprite mask export enabled: " + std::to_string(_spriteMaskWidth) + "x" + std::to_string(_spriteMaskHeight)
+	);
+	return true;
+}
+
+void DataCollector::ReadCombinedMemoryState(MemoryDumper* memoryDumper, MemoryType baseType, MemoryType extType, vector<uint8_t>& output)
+{
+	if(baseType == MemoryType::None) {
+		output.resize(0);
+		return;
+	}
+
+	uint32_t baseSize = memoryDumper->GetMemorySize(baseType);
+	uint32_t extSize = extType != baseType && extType != MemoryType::None ? memoryDumper->GetMemorySize(extType) : 0;
+	output.resize(baseSize + extSize);
+
+	if(baseSize > 0) {
+		memoryDumper->GetMemoryState(baseType, output.data());
+	}
+	if(extSize > 0) {
+		memoryDumper->GetMemoryState(extType, output.data() + baseSize);
+	}
+}
+
+bool DataCollector::CaptureSpriteMask(Emulator* emu, uint8_t* output)
+{
+	memset(output, 0, _spriteMaskSize);
+
+	DebuggerRequest dbgRequest = emu->GetDebugger(false);
+	Debugger* debugger = dbgRequest.GetDebugger();
+	if(!debugger) {
+		return false;
+	}
+
+	PpuTools* ppuTools = debugger->GetPpuTools(_spriteMaskCpuType);
+	MemoryDumper* memoryDumper = debugger->GetMemoryDumper();
+	if(!ppuTools || !memoryDumper) {
+		return false;
+	}
+
+	debugger->GetPpuState(AsBaseState(_ppuStateBuffer), _spriteMaskCpuType);
+	ppuTools->GetPpuToolsState(AsBaseState(_ppuToolsStateBuffer));
+
+	MemoryType vramType = GetVramMemoryType(_spriteMaskCpuType);
+	MemoryType vramExtType = GetVramMemoryType(_spriteMaskCpuType, true);
+	ReadCombinedMemoryState(memoryDumper, vramType, vramExtType, _spriteVramBuffer);
+	if(_spriteVramBuffer.empty()) {
+		return false;
+	}
+
+	MemoryType spriteRamType = GetSpriteRamMemoryType(_spriteMaskCpuType);
+	MemoryType spriteRamExtType = GetSpriteRamMemoryType(_spriteMaskCpuType, true);
+	ReadCombinedMemoryState(memoryDumper, spriteRamType, spriteRamExtType, _spriteRamBuffer);
+
+	GetSpritePreviewOptions options = {};
+	options.Background = SpriteBackground::Transparent;
+	DebugSpritePreviewInfo previewInfo = ppuTools->GetSpritePreviewInfo(options, AsBaseState(_ppuStateBuffer), AsBaseState(_ppuToolsStateBuffer));
+	if(previewInfo.Width == 0 || previewInfo.Height == 0 || previewInfo.SpriteCount == 0) {
+		return false;
+	}
+
+	DebugPaletteInfo palette = ppuTools->GetPaletteInfo({});
+	if(palette.ColorCount == 0) {
+		return false;
+	}
+
+	vector<DebugSpriteInfo> sprites(previewInfo.SpriteCount);
+	_spritePreviews.resize((size_t)previewInfo.SpriteCount * SpritePreviewSize);
+	_spriteScreenPreview.resize((size_t)previewInfo.Width * previewInfo.Height);
+	uint8_t* spriteRam = _spriteRamBuffer.empty() ? nullptr : _spriteRamBuffer.data();
+	ppuTools->GetSpriteList(
+		options,
+		AsBaseState(_ppuStateBuffer),
+		AsBaseState(_ppuToolsStateBuffer),
+		_spriteVramBuffer.data(),
+		spriteRam,
+		palette.RgbPalette,
+		sprites.data(),
+		_spritePreviews.data(),
+		_spriteScreenPreview.data()
+	);
+
+	uint32_t copyWidth = std::min(_spriteMaskWidth, previewInfo.VisibleWidth);
+	uint32_t copyHeight = std::min(_spriteMaskHeight, previewInfo.VisibleHeight);
+	for(uint32_t y = 0; y < copyHeight; y++) {
+		uint32_t srcY = previewInfo.VisibleY + y;
+		if(srcY >= previewInfo.Height) {
+			break;
+		}
+
+		for(uint32_t x = 0; x < copyWidth; x++) {
+			uint32_t srcX = previewInfo.VisibleX + x;
+			if(srcX >= previewInfo.Width) {
+				break;
+			}
+
+			output[y * _spriteMaskWidth + x] = _spriteScreenPreview[srcY * previewInfo.Width + srcX] != 0;
+		}
+	}
+
+	return true;
 }
 
 void DataCollector::CaptureFrame(Emulator* emu)
@@ -253,6 +513,12 @@ void DataCollector::CaptureFrame(Emulator* emu)
 		} else {
 			_captureBuffer[offset] = 0;
 		}
+	}
+	offset += _inputBytesPerFrame;
+
+	if(_recordSpriteMask) {
+		CaptureSpriteMask(emu, _captureBuffer.data() + offset);
+		offset += _spriteMaskSize;
 	}
 
 	// Wait for previous frame to finish writing
@@ -318,6 +584,7 @@ void DataCollector::StopRecording()
 	if(_npyRam.is_open()) _npyRam.close();
 	if(_npyWram.is_open()) _npyWram.close();
 	if(_npyInput.is_open()) _npyInput.close();
+	if(_npySpriteMask.is_open()) _npySpriteMask.close();
 
 	MessageManager::DisplayMessage("DataRecording", "Stopped. Frames: " + std::to_string(_recordedFrameCount));
 }
