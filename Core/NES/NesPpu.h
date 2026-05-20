@@ -108,6 +108,7 @@ public:
 	void Reset(bool softReset) override;
 
 	uint16_t* GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits = false) override;
+	uint8_t* GetSpriteMaskBuffer(bool previousBuffer) override;
 	void DebugCopyOutputBuffer(uint16_t* target);
 	void DebugUpdateFrameBuffer(bool toGrayscale);
 	
@@ -151,4 +152,6 @@ template<class T> NesPpu<T>::~NesPpu()
 {
 	delete[] _outputBuffers[0];
 	delete[] _outputBuffers[1];
+	delete[] _spriteMaskBuffers[0];
+	delete[] _spriteMaskBuffers[1];
 }

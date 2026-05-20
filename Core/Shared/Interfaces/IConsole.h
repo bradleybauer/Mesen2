@@ -36,6 +36,10 @@ struct PpuFrameInfo
 	uint32_t ScanlineCount;
 	int32_t FirstScanline;
 	uint32_t CycleCount;
+	uint8_t* SpriteMaskBuffer = nullptr;
+	uint32_t SpriteMaskWidth = 0;
+	uint32_t SpriteMaskHeight = 0;
+	uint32_t SpriteMaskBufferSize = 0;
 };
 
 enum class ShortcutState

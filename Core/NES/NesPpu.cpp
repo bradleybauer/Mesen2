@@ -38,10 +38,15 @@ template<class T> NesPpu<T>::NesPpu(NesConsole* console)
 
 	_outputBuffers[0] = new uint16_t[256 * 240];
 	_outputBuffers[1] = new uint16_t[256 * 240];
+	_spriteMaskBuffers[0] = new uint8_t[256 * 240];
+	_spriteMaskBuffers[1] = new uint8_t[256 * 240];
 
 	_currentOutputBuffer = _outputBuffers[0];
+	_currentSpriteMaskBuffer = _spriteMaskBuffers[0];
 	memset(_outputBuffers[0], 0, 256 * 240 * sizeof(uint16_t));
 	memset(_outputBuffers[1], 0, 256 * 240 * sizeof(uint16_t));
+	memset(_spriteMaskBuffers[0], 0, 256 * 240 * sizeof(uint8_t));
+	memset(_spriteMaskBuffers[1], 0, 256 * 240 * sizeof(uint8_t));
 
 	if(_emu->GetSettings()->GetNesConfig().RamPowerOnState == RamState::Random) {
 		_console->InitializeRam(_paletteRam, 0x20);
@@ -121,6 +126,7 @@ template<class T> void NesPpu<T>::Reset(bool softReset)
 	_intensifyColorBits = 0;
 	_paletteRamMask = 0x3F;
 	_lastUpdatedPixel = -1;
+	_lastPixelSprite = false;
 	_lastSprite = nullptr;
 	_oamCopybuffer = 0;
 	_spriteInRange = false;
@@ -816,6 +822,7 @@ template<class T> void NesPpu<T>::ShiftTileRegisters()
 
 template<class T> uint8_t NesPpu<T>::GetPixelColor()
 {
+	_lastPixelSprite = false;
 	uint8_t offset = _xScroll;
 	uint8_t backgroundColor = 0;
 	uint8_t spriteBgColor = 0;
@@ -855,6 +862,7 @@ template<class T> uint8_t NesPpu<T>::GetPixelColor()
 
 					if(_emulatorSpritesEnabled && (backgroundColor == 0 || !_spriteTiles[i].BackgroundPriority)) {
 						//Check sprite priority
+						_lastPixelSprite = true;
 						return _lastSprite->PaletteOffset + spriteColor;
 					}
 					break;
@@ -1170,6 +1178,11 @@ template<class T> uint16_t* NesPpu<T>::GetScreenBuffer(bool previousBuffer, bool
 	return previousBuffer ? ((_currentOutputBuffer == _outputBuffers[0]) ? _outputBuffers[1] : _outputBuffers[0]) : _currentOutputBuffer;
 }
 
+template<class T> uint8_t* NesPpu<T>::GetSpriteMaskBuffer(bool previousBuffer)
+{
+	return previousBuffer ? ((_currentSpriteMaskBuffer == _spriteMaskBuffers[0]) ? _spriteMaskBuffers[1] : _spriteMaskBuffers[0]) : _currentSpriteMaskBuffer;
+}
+
 template<class T> void NesPpu<T>::DebugCopyOutputBuffer(uint16_t *target)
 {
 	memcpy(target, _currentOutputBuffer, NesConstants::ScreenPixelCount * sizeof(uint16_t));
@@ -1400,6 +1413,8 @@ template<class T> void NesPpu<T>::ProcessScanlineFirstCycle()
 
 			//Switch to alternate output buffer (VideoDecoder may still be decoding the last frame buffer)
 			_currentOutputBuffer = (_currentOutputBuffer == _outputBuffers[0]) ? _outputBuffers[1] : _outputBuffers[0];
+			_currentSpriteMaskBuffer = (_currentSpriteMaskBuffer == _spriteMaskBuffers[0]) ? _spriteMaskBuffers[1] : _spriteMaskBuffers[0];
+			memset(_currentSpriteMaskBuffer, 0, NesConstants::ScreenPixelCount * sizeof(uint8_t));
 			_emu->AddDebugEvent<CpuType::Nes>(DebugEventType::BgColorChange);
 		} else if(_prevRenderingEnabled) {
 			if(_scanline > 0 || (!(_frameCount & 0x01) || _region != ConsoleRegion::Ntsc || GetPpuModel() != PpuModel::Ppu2C02)) {
@@ -1595,20 +1610,24 @@ template<class T> void NesPpu<T>::Serialize(Serializer& s)
 
 template NesPpu<DefaultNesPpu>::NesPpu(NesConsole* console);
 template uint16_t* NesPpu<DefaultNesPpu>::GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits);
+template uint8_t* NesPpu<DefaultNesPpu>::GetSpriteMaskBuffer(bool previousBuffer);
 template void NesPpu<DefaultNesPpu>::Exec();
 template uint32_t NesPpu<DefaultNesPpu>::GetPixelBrightness(uint8_t x, uint8_t y);
 
 template NesPpu<NsfPpu>::NesPpu(NesConsole* console);
 template uint16_t* NesPpu<NsfPpu>::GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits);
+template uint8_t* NesPpu<NsfPpu>::GetSpriteMaskBuffer(bool previousBuffer);
 template void NesPpu<NsfPpu>::Exec();
 template uint32_t NesPpu<NsfPpu>::GetPixelBrightness(uint8_t x, uint8_t y);
 
 template NesPpu<HdNesPpu>::NesPpu(NesConsole* console);
 template uint16_t* NesPpu<HdNesPpu>::GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits);
+template uint8_t* NesPpu<HdNesPpu>::GetSpriteMaskBuffer(bool previousBuffer);
 template void NesPpu<HdNesPpu>::Exec();
 template uint32_t NesPpu<HdNesPpu>::GetPixelBrightness(uint8_t x, uint8_t y);
 
 template NesPpu<HdBuilderPpu>::NesPpu(NesConsole* console);
 template uint16_t* NesPpu<HdBuilderPpu>::GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits);
+template uint8_t* NesPpu<HdBuilderPpu>::GetSpriteMaskBuffer(bool previousBuffer);
 template void NesPpu<HdBuilderPpu>::Exec();
 template uint32_t NesPpu<HdBuilderPpu>::GetPixelBrightness(uint8_t x, uint8_t y);

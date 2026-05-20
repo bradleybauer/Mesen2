@@ -591,6 +591,10 @@ PpuFrameInfo Gameboy::GetPpuFrame()
 	frame.FirstScanline = 0;
 	frame.ScanlineCount = 154;
 	frame.CycleCount = 456;
+	frame.SpriteMaskBuffer = _ppu->GetSpriteMaskBuffer();
+	frame.SpriteMaskWidth = frame.Width;
+	frame.SpriteMaskHeight = frame.Height;
+	frame.SpriteMaskBufferSize = frame.Width * frame.Height;
 	return frame;
 }
 

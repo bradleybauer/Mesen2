@@ -24,12 +24,15 @@ public:
 	__forceinline void DrawPixel()
 	{
 		//This is called 3.7 million times per second - needs to be as fast as possible.
+		uint32_t pixelOffset = (_scanline << 8) + _cycle - 1;
 		if(IsRenderingEnabled() || ((_videoRamAddr & 0x3F00) != 0x3F00)) {
 			uint32_t color = GetPixelColor();
-			_currentOutputBuffer[(_scanline << 8) + _cycle - 1] = _paletteRam[color & 0x03 ? color : 0];
+			_currentOutputBuffer[pixelOffset] = _paletteRam[color & 0x03 ? color : 0];
+			_currentSpriteMaskBuffer[pixelOffset] = _lastPixelSprite;
 		} else {
 			//"If the current VRAM address points in the range $3F00-$3FFF during forced blanking, the color indicated by this palette location will be shown on screen instead of the backdrop color."
-			_currentOutputBuffer[(_scanline << 8) + _cycle - 1] = _paletteRam[_videoRamAddr & 0x1F];
+			_currentOutputBuffer[pixelOffset] = _paletteRam[_videoRamAddr & 0x1F];
+			_currentSpriteMaskBuffer[pixelOffset] = 0;
 		}
 	}
 };

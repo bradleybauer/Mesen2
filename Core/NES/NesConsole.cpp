@@ -339,6 +339,10 @@ PpuFrameInfo NesConsole::GetPpuFrame()
 	frame.FirstScanline = -1;
 	frame.ScanlineCount = _ppu->GetScanlineCount();
 	frame.CycleCount = 341;
+	frame.SpriteMaskBuffer = _ppu->GetSpriteMaskBuffer(false);
+	frame.SpriteMaskWidth = frame.Width;
+	frame.SpriteMaskHeight = frame.Height;
+	frame.SpriteMaskBufferSize = frame.Width * frame.Height;
 	return frame;
 }
 

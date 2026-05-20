@@ -118,6 +118,8 @@ private:
 
 	uint16_t* _outputBuffers[2] = {};
 	uint16_t* _currentBuffer = nullptr;
+	uint8_t* _spriteMaskBuffers[2] = {};
+	uint8_t* _currentSpriteMaskBuffer = nullptr;
 
 	GbaPixelData* _oamWriteOutput = nullptr;
 	GbaPixelData* _oamReadOutput = nullptr;
@@ -266,6 +268,7 @@ public:
 	uint8_t ReadRegister(uint32_t addr);
 
 	uint16_t* GetScreenBuffer() { return _currentBuffer; }
+	uint8_t* GetSpriteMaskBuffer() { return _currentSpriteMaskBuffer; }
 	uint16_t* GetPreviousScreenBuffer() { return _currentBuffer == _outputBuffers[0] ? _outputBuffers[1] : _outputBuffers[0]; }
 
 	GbaPpuState& GetState() { return _state; }

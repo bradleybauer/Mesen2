@@ -50,6 +50,7 @@ protected:
 	//48
 	BaseMapper* _mapper = nullptr;
 	uint16_t* _currentOutputBuffer = nullptr;
+	uint8_t* _currentSpriteMaskBuffer = nullptr;
 	////////////////////////
 	//64 : end of cache line
 	////////////////////////
@@ -75,6 +76,7 @@ protected:
 	bool _writeToggle = false; //not used in rendering
 	//160
 	NesSpriteInfo* _lastSprite = nullptr; //used by HD ppu
+	bool _lastPixelSprite = false;
 	NesConsole* _console = nullptr;
 	//176
 	PpuControlFlags _control = {}; // 8 bytes
@@ -93,6 +95,7 @@ protected:
 	Emulator* _emu = nullptr;
 	EmuSettings* _settings = nullptr;
 	uint16_t* _outputBuffers[2] = {};
+	uint8_t* _spriteMaskBuffers[2] = {};
 
 	ConsoleRegion _region = {};
 	uint16_t _standardVblankEnd = 0;
@@ -131,6 +134,7 @@ public:
 	uint32_t GetFrameCycle() { return ((_scanline + 1) * 341) + _cycle; }
 
 	virtual uint16_t* GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits = false) = 0;
+	virtual uint8_t* GetSpriteMaskBuffer(bool previousBuffer) = 0;
 	virtual void UpdateTimings(ConsoleRegion region, bool overclockAllowed = true) = 0;
 
 	void GetState(NesPpuState& state);

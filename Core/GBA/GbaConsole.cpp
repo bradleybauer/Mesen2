@@ -382,6 +382,10 @@ PpuFrameInfo GbaConsole::GetPpuFrame()
 	frame.FirstScanline = 0;
 	frame.ScanlineCount = 228;
 	frame.CycleCount = 308*4;
+	frame.SpriteMaskBuffer = _ppu->GetSpriteMaskBuffer();
+	frame.SpriteMaskWidth = frame.Width;
+	frame.SpriteMaskHeight = frame.Height;
+	frame.SpriteMaskBufferSize = frame.Width * frame.Height;
 	return frame;
 }
 

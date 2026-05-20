@@ -31,9 +31,14 @@ void GbPpu::Init(Emulator* emu, Gameboy* gameboy, GbMemoryManager* memoryManager
 
 	_outputBuffers[0] = new uint16_t[GbConstants::PixelCount];
 	_outputBuffers[1] = new uint16_t[GbConstants::PixelCount];
+	_spriteMaskBuffers[0] = new uint8_t[GbConstants::PixelCount];
+	_spriteMaskBuffers[1] = new uint8_t[GbConstants::PixelCount];
 	memset(_outputBuffers[0], 0, GbConstants::PixelCount * sizeof(uint16_t));
 	memset(_outputBuffers[1], 0, GbConstants::PixelCount * sizeof(uint16_t));
+	memset(_spriteMaskBuffers[0], 0, GbConstants::PixelCount * sizeof(uint8_t));
+	memset(_spriteMaskBuffers[1], 0, GbConstants::PixelCount * sizeof(uint8_t));
 	_currentBuffer = _outputBuffers[0];
+	_currentSpriteMaskBuffer = _spriteMaskBuffers[0];
 
 	_eventViewerBuffers[0] = new uint16_t[456 * 154];
 	_eventViewerBuffers[1] = new uint16_t[456 * 154];
@@ -75,6 +80,8 @@ GbPpu::~GbPpu()
 {
 	delete[] _outputBuffers[0];
 	delete[] _outputBuffers[1];
+	delete[] _spriteMaskBuffers[0];
+	delete[] _spriteMaskBuffers[1];
 	delete[] _eventViewerBuffers[0];
 	delete[] _eventViewerBuffers[1];
 }
@@ -490,6 +497,7 @@ void GbPpu::WriteBgPixel(uint8_t colorIndex)
 {
 	uint16_t outOffset = _state.Scanline * GbConstants::ScreenWidth + _drawnPixels;
 	_currentBuffer[outOffset] = LcdReadBgPalette(colorIndex) & 0x7FFF;
+	_currentSpriteMaskBuffer[outOffset] = 0;
 	if(_gameboy->IsSgb()) {
 		_gameboy->GetSgb()->WriteLcdColor(_state.Scanline, (uint8_t)_drawnPixels, colorIndex & 0x03);
 	}
@@ -499,6 +507,7 @@ void GbPpu::WriteObjPixel(uint8_t colorIndex)
 {
 	uint16_t outOffset = _state.Scanline * GbConstants::ScreenWidth + _drawnPixels;
 	_currentBuffer[outOffset] = LcdReadObjPalette(colorIndex) & 0x7FFF;
+	_currentSpriteMaskBuffer[outOffset] = 1;
 	if(_gameboy->IsSgb()) {
 		_gameboy->GetSgb()->WriteLcdColor(_state.Scanline, (uint8_t)_drawnPixels, colorIndex & 0x03);
 	}
@@ -814,6 +823,8 @@ void GbPpu::SendFrame()
 		//So for CGB, the screen is only cleared if the LCD has been turned off for a while
 		std::fill(_outputBuffers[0], _outputBuffers[0] + GbConstants::PixelCount, 0x7FFF);
 		std::fill(_outputBuffers[1], _outputBuffers[1] + GbConstants::PixelCount, 0x7FFF);
+		memset(_spriteMaskBuffers[0], 0, GbConstants::PixelCount * sizeof(uint8_t));
+		memset(_spriteMaskBuffers[1], 0, GbConstants::PixelCount * sizeof(uint8_t));
 	}
 	_forceBlankFrame = false;
 	_isFirstFrame = false;
@@ -826,6 +837,8 @@ void GbPpu::SendFrame()
 	_gameboy->ProcessEndOfFrame();
 
 	_currentBuffer = _currentBuffer == _outputBuffers[0] ? _outputBuffers[1] : _outputBuffers[0];
+	_currentSpriteMaskBuffer = _currentSpriteMaskBuffer == _spriteMaskBuffers[0] ? _spriteMaskBuffers[1] : _spriteMaskBuffers[0];
+	memset(_currentSpriteMaskBuffer, 0, GbConstants::PixelCount * sizeof(uint8_t));
 }
 
 void GbPpu::DebugSendFrame()

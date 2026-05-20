@@ -18,6 +18,8 @@ private:
 	GbDmaController* _dmaController = nullptr;
 	uint16_t* _outputBuffers[2] = {};
 	uint16_t* _currentBuffer = nullptr;
+	uint8_t* _spriteMaskBuffers[2] = {};
+	uint8_t* _currentSpriteMaskBuffer = nullptr;
 
 	uint16_t* _eventViewerBuffers[2] = {};
 	uint16_t* _currentEventViewerBuffer = nullptr;
@@ -111,6 +113,7 @@ public:
 	GbPpuState GetState();
 	GbPpuState& GetStateRef();
 	uint16_t* GetOutputBuffer();
+	uint8_t* GetSpriteMaskBuffer() { return _currentSpriteMaskBuffer; }
 	uint16_t* GetEventViewerBuffer();
 	uint16_t* GetPreviousEventViewerBuffer();
 

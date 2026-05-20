@@ -99,6 +99,48 @@ namespace
 	{
 		return *reinterpret_cast<BaseState*>(buffer.data());
 	}
+
+	CpuType GetRecordingCpuType(Emulator* emu)
+	{
+		shared_ptr<IConsole> console = emu->GetConsole();
+		if(!console) {
+			return CpuType::Nes;
+		}
+
+		vector<CpuType> cpuTypes = console->GetCpuTypes();
+		for(CpuType cpuType : { CpuType::Gba, CpuType::Gameboy, CpuType::Nes }) {
+			if(std::find(cpuTypes.begin(), cpuTypes.end(), cpuType) != cpuTypes.end()) {
+				return cpuType;
+			}
+		}
+
+		return cpuTypes.empty() ? CpuType::Nes : cpuTypes[0];
+	}
+
+	MemoryType GetRecordingRamMemoryType(CpuType cpuType)
+	{
+		switch(cpuType) {
+			case CpuType::Gba: return MemoryType::GbaIntWorkRam;
+			case CpuType::Gameboy: return MemoryType::GbWorkRam;
+			case CpuType::Nes: return MemoryType::NesInternalRam;
+			default: return MemoryType::None;
+		}
+	}
+
+	MemoryType GetRecordingWorkRamMemoryType(CpuType cpuType)
+	{
+		switch(cpuType) {
+			case CpuType::Gba: return MemoryType::GbaExtWorkRam;
+			case CpuType::Gameboy: return MemoryType::GbHighRam;
+			case CpuType::Nes: return MemoryType::NesWorkRam;
+			default: return MemoryType::None;
+		}
+	}
+
+	uint16_t GetRecordingInputBytesPerFrame(CpuType cpuType)
+	{
+		return cpuType == CpuType::Gba ? 2 : 1;
+	}
 }
 
 DataCollector::DataCollector()
@@ -124,15 +166,22 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 	_basePath = basePath;
 	_options = options;
 
+	_recordingCpuType = GetRecordingCpuType(emu);
+	_ramMemoryType = GetRecordingRamMemoryType(_recordingCpuType);
+	_wramMemoryType = GetRecordingWorkRamMemoryType(_recordingCpuType);
+
 	// Query memory sizes from the emulator's registered memory regions
-	ConsoleMemoryInfo ramInfo = emu->GetMemory(MemoryType::NesInternalRam);
-	ConsoleMemoryInfo wramInfo = emu->GetMemory(MemoryType::NesWorkRam);
+	ConsoleMemoryInfo ramInfo = _ramMemoryType == MemoryType::None ? ConsoleMemoryInfo {} : emu->GetMemory(_ramMemoryType);
+	ConsoleMemoryInfo wramInfo = _wramMemoryType == MemoryType::None ? ConsoleMemoryInfo {} : emu->GetMemory(_wramMemoryType);
+	if(!ramInfo.Memory || ramInfo.Size == 0) {
+		MessageManager::DisplayMessage("DataRecording", "Could not find supported RAM for this console");
+		return false;
+	}
 
 	_ramSize = ramInfo.Size;
 	_wramSize = wramInfo.Memory ? wramInfo.Size : 0;
 
-	// Fixed 1 byte for port 1 input
-	_inputBytesPerFrame = 1;
+	_inputBytesPerFrame = GetRecordingInputBytesPerFrame(_recordingCpuType);
 	_recordSpriteMask = InitializeSpriteMaskRecording(emu);
 
 	// Calculate fixed record size: frame_number(4) + ram + wram + input(1) + optional sprite mask
@@ -151,7 +200,7 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 		_npySpriteMask.open(basePath + ".sprite_mask.npy", std::ios::out | std::ios::binary);
 	}
 
-	if(!_npyFrames || !_npyRam || (_recordSpriteMask && !_npySpriteMask)) {
+	if(!_npyFrames || !_npyRam || (_wramSize > 0 && !_npyWram) || (_inputBytesPerFrame > 0 && !_npyInput) || (_recordSpriteMask && !_npySpriteMask)) {
 		MessageManager::DisplayMessage("DataRecording", "Could not open npy files: " + basePath);
 		return false;
 	}
@@ -166,7 +215,12 @@ bool DataCollector::StartRecording(string basePath, Emulator* emu, RecordingOpti
 		WriteNpyHeader(_npyWram, "|u1", 2, wramShape);
 	}
 	if(_inputBytesPerFrame > 0) {
-		WriteNpyHeader(_npyInput, "|u1", 1, zeroShape1);
+		if(_inputBytesPerFrame == 1) {
+			WriteNpyHeader(_npyInput, "|u1", 1, zeroShape1);
+		} else {
+			uint32_t inputShape[] = { 0, _inputBytesPerFrame };
+			WriteNpyHeader(_npyInput, "|u1", 2, inputShape);
+		}
 	}
 	if(_recordSpriteMask) {
 		uint32_t spriteMaskShape[] = { 0, _spriteMaskHeight, _spriteMaskWidth };
@@ -267,8 +321,13 @@ void DataCollector::FinalizeNpyHeaders()
 
 	if(_npyInput.is_open()) {
 		_npyInput.seekp(0);
-		uint32_t shape[] = { N };
-		WriteNpyHeader(_npyInput, "|u1", 1, shape);
+		if(_inputBytesPerFrame == 1) {
+			uint32_t shape[] = { N };
+			WriteNpyHeader(_npyInput, "|u1", 1, shape);
+		} else {
+			uint32_t shape[] = { N, _inputBytesPerFrame };
+			WriteNpyHeader(_npyInput, "|u1", 2, shape);
+		}
 	}
 
 	if(_npySpriteMask.is_open()) {
@@ -328,9 +387,28 @@ void DataCollector::WriterLoop()
 bool DataCollector::InitializeSpriteMaskRecording(Emulator* emu)
 {
 	_recordSpriteMask = false;
+	_useRendererSpriteMask = false;
 	_spriteMaskWidth = 0;
 	_spriteMaskHeight = 0;
 	_spriteMaskSize = 0;
+
+	shared_ptr<IConsole> console = emu->GetConsole();
+	if(console) {
+		PpuFrameInfo frame = console->GetPpuFrame();
+		if(frame.SpriteMaskBuffer && frame.SpriteMaskWidth > 0 && frame.SpriteMaskHeight > 0 && frame.SpriteMaskBufferSize > 0) {
+			_spriteMaskWidth = frame.SpriteMaskWidth;
+			_spriteMaskHeight = frame.SpriteMaskHeight;
+			_spriteMaskSize = frame.SpriteMaskBufferSize;
+			_recordSpriteMask = true;
+			_useRendererSpriteMask = true;
+
+			MessageManager::DisplayMessage(
+				"DataRecording",
+				"Renderer sprite mask export enabled: " + std::to_string(_spriteMaskWidth) + "x" + std::to_string(_spriteMaskHeight)
+			);
+			return true;
+		}
+	}
 
 	DebuggerRequest dbgRequest = emu->GetDebugger(true);
 	Debugger* debugger = dbgRequest.GetDebugger();
@@ -391,6 +469,20 @@ void DataCollector::ReadCombinedMemoryState(MemoryDumper* memoryDumper, MemoryTy
 bool DataCollector::CaptureSpriteMask(Emulator* emu, uint8_t* output)
 {
 	memset(output, 0, _spriteMaskSize);
+
+	if(_useRendererSpriteMask) {
+		shared_ptr<IConsole> console = emu->GetConsole();
+		if(!console) {
+			return false;
+		}
+
+		PpuFrameInfo frame = console->GetPpuFrame();
+		if(frame.SpriteMaskBuffer && frame.SpriteMaskBufferSize == _spriteMaskSize) {
+			memcpy(output, frame.SpriteMaskBuffer, _spriteMaskSize);
+			return true;
+		}
+		return false;
+	}
 
 	DebuggerRequest dbgRequest = emu->GetDebugger(false);
 	Debugger* debugger = dbgRequest.GetDebugger();
@@ -481,15 +573,17 @@ void DataCollector::CaptureFrame(Emulator* emu)
 	offset += 4;
 
 	// Pack RAM
-	ConsoleMemoryInfo ramInfo = emu->GetMemory(MemoryType::NesInternalRam);
+	ConsoleMemoryInfo ramInfo = emu->GetMemory(_ramMemoryType);
 	if(ramInfo.Memory && _ramSize > 0) {
 		memcpy(_captureBuffer.data() + offset, ramInfo.Memory, _ramSize);
+	} else if(_ramSize > 0) {
+		memset(_captureBuffer.data() + offset, 0, _ramSize);
 	}
 	offset += _ramSize;
 
 	// Pack WRAM
 	if(_wramSize > 0) {
-		ConsoleMemoryInfo wramInfo = emu->GetMemory(MemoryType::NesWorkRam);
+		ConsoleMemoryInfo wramInfo = emu->GetMemory(_wramMemoryType);
 		if(wramInfo.Memory) {
 			memcpy(_captureBuffer.data() + offset, wramInfo.Memory, _wramSize);
 		} else {
@@ -498,20 +592,19 @@ void DataCollector::CaptureFrame(Emulator* emu)
 	}
 	offset += _wramSize;
 
-	// Pack port 1 input (1 byte)
+	// Pack port 1 input
+	memset(_captureBuffer.data() + offset, 0, _inputBytesPerFrame);
 	{
 		shared_ptr<IConsole> console = emu->GetConsole();
 		if(console) {
 			vector<ControllerData> portStates = console->GetControlManager()->GetPortStates();
-			_captureBuffer[offset] = 0;
 			for(auto& ctrl : portStates) {
 				if(ctrl.Port == 0 && !ctrl.State.State.empty()) {
-					_captureBuffer[offset] = ctrl.State.State[0];
+					uint32_t copySize = std::min<uint32_t>(_inputBytesPerFrame, (uint32_t)ctrl.State.State.size());
+					memcpy(_captureBuffer.data() + offset, ctrl.State.State.data(), copySize);
 					break;
 				}
 			}
-		} else {
-			_captureBuffer[offset] = 0;
 		}
 	}
 	offset += _inputBytesPerFrame;

@@ -41,7 +41,11 @@ private:
 	uint32_t _ramSize = 0;
 	uint32_t _wramSize = 0;
 	uint16_t _inputBytesPerFrame = 0;
+	CpuType _recordingCpuType = CpuType::Nes;
+	MemoryType _ramMemoryType = MemoryType::NesInternalRam;
+	MemoryType _wramMemoryType = MemoryType::NesWorkRam;
 	bool _recordSpriteMask = false;
+	bool _useRendererSpriteMask = false;
 	CpuType _spriteMaskCpuType = CpuType::Nes;
 	uint32_t _spriteMaskWidth = 0;
 	uint32_t _spriteMaskHeight = 0;

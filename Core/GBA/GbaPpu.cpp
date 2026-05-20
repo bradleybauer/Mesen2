@@ -38,9 +38,14 @@ void GbaPpu::Init(Emulator* emu, GbaConsole* console, GbaMemoryManager* memoryMa
 
 	_outputBuffers[0] = new uint16_t[GbaConstants::PixelCount];
 	_outputBuffers[1] = new uint16_t[GbaConstants::PixelCount];
+	_spriteMaskBuffers[0] = new uint8_t[GbaConstants::PixelCount];
+	_spriteMaskBuffers[1] = new uint8_t[GbaConstants::PixelCount];
 	memset(_outputBuffers[0], 0, GbaConstants::PixelCount * sizeof(uint16_t));
 	memset(_outputBuffers[1], 0, GbaConstants::PixelCount * sizeof(uint16_t));
+	memset(_spriteMaskBuffers[0], 0, GbaConstants::PixelCount * sizeof(uint8_t));
+	memset(_spriteMaskBuffers[1], 0, GbaConstants::PixelCount * sizeof(uint8_t));
 	_currentBuffer = _outputBuffers[0];
+	_currentSpriteMaskBuffer = _spriteMaskBuffers[0];
 
 	_oamReadOutput = _oamOutputBuffers[0];
 	_oamWriteOutput = _oamOutputBuffers[1];
@@ -69,6 +74,8 @@ GbaPpu::~GbaPpu()
 {
 	delete[] _outputBuffers[0];
 	delete[] _outputBuffers[1];
+	delete[] _spriteMaskBuffers[0];
+	delete[] _spriteMaskBuffers[1];
 }
 
 void GbaPpu::ProcessHBlank()
@@ -167,6 +174,8 @@ void GbaPpu::ProcessEndOfScanline()
 		);
 		if(!_skipRender) {
 			_currentBuffer = _currentBuffer == _outputBuffers[0] ? _outputBuffers[1] : _outputBuffers[0];
+			_currentSpriteMaskBuffer = _currentSpriteMaskBuffer == _spriteMaskBuffers[0] ? _spriteMaskBuffers[1] : _spriteMaskBuffers[0];
+			memset(_currentSpriteMaskBuffer, 0, GbaConstants::PixelCount * sizeof(uint8_t));
 		}
 	}
 
@@ -229,7 +238,9 @@ void GbaPpu::RenderScanline(bool forceRender)
 
 	if(_state.ForcedBlank || _state.ForcedBlankDisableTimer) {
 		uint16_t* rowStart = _currentBuffer + (_state.Scanline * GbaConstants::ScreenWidth);
+		uint8_t* maskRowStart = _currentSpriteMaskBuffer + (_state.Scanline * GbaConstants::ScreenWidth);
 		std::fill(rowStart, rowStart + GbaConstants::ScreenWidth, 0x7FFF);
+		memset(maskRowStart, 0, GbaConstants::ScreenWidth * sizeof(uint8_t));
 		return;
 	}
 	
@@ -275,6 +286,7 @@ template<GbaPpuBlendEffect effect, bool bg0Enabled, bool bg1Enabled, bool bg2Ena
 void GbaPpu::ProcessColorMath()
 {
 	uint16_t* dst = _skipRender ? _skippedOutput : (_currentBuffer + (_state.Scanline * GbaConstants::ScreenWidth));
+	uint8_t* maskDst = _currentSpriteMaskBuffer + (_state.Scanline * GbaConstants::ScreenWidth);
 	uint8_t mainCoeff = std::min<uint8_t>(16, _state.BlendMainCoefficient);
 	uint8_t subCoeff = std::min<uint8_t>(16, _state.BlendSubCoefficient);
 	
@@ -320,6 +332,10 @@ void GbaPpu::ProcessColorMath()
 		}
 		if constexpr(bg3Enabled) {
 			ProcessLayerPixel<3, windowEnabled>(x, wnd, main, sub);
+		}
+
+		if(!_skipRender) {
+			maskDst[x] = main.Layer == GbaPpu::SpriteLayerIndex;
 		}
 
 		if((main.Color & (GbaPpu::SpriteBlendFlag | GbaPpu::DirectColorFlag)) == GbaPpu::SpriteBlendFlag && _state.BlendSub[sub.Layer]) {
